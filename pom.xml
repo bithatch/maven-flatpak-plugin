@@ -2,10 +2,10 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>uk.co.bithatch</groupId>
-	<artifactId>maven-flatpak-plugin</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<artifactId>flatpak-maven-plugin</artifactId>
+	<version>0.0.2</version>
 	<packaging>maven-plugin</packaging>
-	<name>Generate Flatpaks automatically</name>
+	<name>Flatpak Maven Plugin</name>
 	<properties>
 		<maven.compiler.target>1.8</maven.compiler.target>
 		<maven.compiler.source>1.8</maven.compiler.source>
@@ -21,6 +21,7 @@
 		<maven-artifact.version>3.9.0</maven-artifact.version>
 		<maven-core.version>3.9.0</maven-core.version>
 		<nexus-staging-maven-plugin.version>1.6.13</nexus-staging-maven-plugin.version>
+        <central-publishing-maven-plugin.version>0.8.0</central-publishing-maven-plugin.version>
 	</properties>
 	<url>https://uk.co.bithatch</url>
 	<organization>
@@ -47,16 +48,6 @@
 			<email>tanktarta@gmail.com</email>
 		</developer>
 	</developers>
-	<distributionManagement>
-		<snapshotRepository>
-			<id>ossrh-bithatch</id>
-			<url>https://oss.sonatype.org/content/repositories/snapshots</url>
-		</snapshotRepository>
-		<repository>
-			<id>ossrh-bithatch</id>
-			<url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-		</repository>
-	</distributionManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.apache.maven</groupId>
@@ -104,6 +95,15 @@
 	</dependencies>
 	<build>
 		<plugins>
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <configuration>
+                    <autoPublish>true</autoPublish>
+                    <waitForPublishCompletion>true</waitForPublishCompletion>
+                    <publishingServerId>ossrh-bithatch</publishingServerId>
+                </configuration>
+            </plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-source-plugin</artifactId>
@@ -128,16 +128,6 @@
 				</executions>
 			</plugin>
 			<plugin>
-				<groupId>org.sonatype.plugins</groupId>
-				<artifactId>nexus-staging-maven-plugin</artifactId>
-				<extensions>true</extensions>
-				<configuration>
-					<serverId>ossrh-bithatch</serverId>
-					<nexusUrl>https://oss.sonatype.org/</nexusUrl>
-					<autoReleaseAfterClose>true</autoReleaseAfterClose>
-				</configuration>
-			</plugin>
-			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-gpg-plugin</artifactId>
 				<executions>
@@ -153,6 +143,12 @@
 		</plugins>
 		<pluginManagement>
 			<plugins>
+                <plugin>
+                    <groupId>org.sonatype.central</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <version>${central-publishing-maven-plugin.version}</version> 
+                    <extensions>true</extensions>
+                </plugin>
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-gpg-plugin</artifactId>
@@ -172,7 +168,7 @@
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-source-plugin</artifactId>
 					<version>${maven-source-plugin.version}</version>
-				</plugin>
+				</plugin>  
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-plugin-plugin</artifactId>
@@ -206,4 +202,5 @@
 			</plugin>
 		</plugins>
 	</reporting>
+	<description>Generates meta-data, launcher scripts and more and creates and install Flatpak packages from (mostly) just your POM metadata.  </description>
 </project>

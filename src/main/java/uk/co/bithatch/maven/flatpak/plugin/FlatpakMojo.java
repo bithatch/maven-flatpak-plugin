@@ -62,6 +62,10 @@ import edu.emory.mathcs.backport.java.util.Collections;
 @Mojo(threadSafe = true, name = "generate", defaultPhase = LifecyclePhase.PACKAGE, requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME, requiresProject = true)
 public class FlatpakMojo extends AbstractMojo {
 
+	private static final String DEFAULT_SDK = "org.freedesktop.Sdk";
+	private static final String DEFAULT_RUNTIME = "24.08";
+	private static final String DEFAULT_CATEGORY = "Utility";
+
 	@Parameter
 	private List<String> excludeArtifacts;
 
@@ -92,7 +96,7 @@ public class FlatpakMojo extends AbstractMojo {
 	@Parameter(defaultValue = "icon")
 	private String iconName;
 
-	@Parameter(defaultValue = "spash")
+	@Parameter(defaultValue = "splash")
 	private String splashName;
 
 	@Parameter
@@ -111,7 +115,7 @@ public class FlatpakMojo extends AbstractMojo {
 	private String mainClass;
 
 	@Parameter
-	private String[] imageTypes = new String[] { "svg", "png", "svg", "gif", "jpg", "jpeg" };
+	private String[] imageTypes = new String[] { "svg", "png", "gif", "jpg", "jpeg" };
 
 	@Parameter(defaultValue = "${maven.compiler.source}")
 	private int javaSdkExtensionVersion;
@@ -142,6 +146,9 @@ public class FlatpakMojo extends AbstractMojo {
 
 	@Parameter(defaultValue = "true", property = "modules")
 	private boolean modules = true;
+
+	@Parameter(defaultValue = "true", property = "classpath")
+	private boolean classpath = true;
 
 	@Parameter(defaultValue = "false")
 	private boolean includeVersion;
@@ -176,6 +183,18 @@ public class FlatpakMojo extends AbstractMojo {
 
 	@Parameter
 	private boolean mainArtificateIsModule;
+	
+	@Parameter
+	private String categories;
+	
+	@Parameter
+	private String runtime;
+	
+	@Parameter
+	private String runtimeVersion;
+	
+	@Parameter
+	private String sdk;
 
 	@Override
 	public void execute() throws MojoExecutionException {
@@ -476,6 +495,14 @@ public class FlatpakMojo extends AbstractMojo {
 			if ((desktopEntry.getIcon() == null || desktopEntry.getIcon().equals("")) && iconFile != null) {
 				desktopEntry.setIcon(manifest.getAppId());
 			}
+			if (desktopEntry.getCategories() == null || desktopEntry.getCategories().isEmpty()) {
+				if(categories == null || categories.equals("")) {
+					desktopEntry.setCategories(DEFAULT_CATEGORY);
+				}
+				else {
+					desktopEntry.setCategories(categories.trim());
+				}
+			}
 			File desktopFile = getDesktopEntryFile();
 
 			appModule.getBuildCommands()
@@ -509,6 +536,7 @@ public class FlatpakMojo extends AbstractMojo {
 			for (Map.Entry<String, String> en : desktopEntry.getComments().entrySet()) {
 				writer.println(String.format("Comment[%s]=%s", en.getKey(), en.getValue()));
 			}
+			writer.println(String.format("Categories=%s", desktopEntry.getCategories()));
 		}
 	}
 
@@ -539,12 +567,18 @@ public class FlatpakMojo extends AbstractMojo {
 			manifest.setRuntime("org.freedesktop.Platform");
 		}
 
-		if (manifest.getRuntimeVersion() == null || manifest.getRuntimeVersion().equals("")) {
-			manifest.setRuntimeVersion("22.08");
+		if(runtime != null && !runtime.equals("")) {
+			manifest.setRuntime(runtime);
+		}
+		else if (manifest.getRuntimeVersion() == null || manifest.getRuntimeVersion().equals("")) {
+			manifest.setRuntimeVersion(DEFAULT_RUNTIME);
 		}
 
-		if (manifest.getSdk() == null || manifest.getSdk().equals("")) {
-			manifest.setSdk("org.freedesktop.Sdk");
+		if(sdk != null && !sdk.equals("")) {
+			manifest.setRuntime(sdk);
+		}
+		else if (manifest.getSdk() == null || manifest.getSdk().equals("")) {
+			manifest.setSdk(DEFAULT_SDK);
 		}
 
 		if (manifest.getCommand() == null || manifest.getCommand().equals("")) {
@@ -626,11 +660,11 @@ public class FlatpakMojo extends AbstractMojo {
 		mapper.writeValue(writer, metaInfo);
 	}
 
-	private String normalisePackage(String pkg) {
+	static  String normalisePackage(String pkg) {
 		return pkg.replace('-', '_');
 	}
 
-	private String normalizeName(String name) {
+	static String normalizeName(String name) {
 		StringBuilder b = new StringBuilder();
 		char[] ch = name.toCharArray();
 		boolean upperNext = true;
@@ -843,6 +877,9 @@ public class FlatpakMojo extends AbstractMojo {
 	private boolean isModule(org.eclipse.aether.artifact.Artifact a) throws IOException {
 		if (!modules)
 			return false;
+		
+		if(!classpath)
+			return true;
 
 		if (automaticArtifacts != null && containsArtifact(new LinkedHashSet<>(automaticArtifacts), a))
 			return true;

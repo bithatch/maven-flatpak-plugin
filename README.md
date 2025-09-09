@@ -1,4 +1,4 @@
-# maven-flatpak-plugin
+# Flatpak Maven Plugin
 
 Generate a Flatpak manifest and other required files from a Maven POM to create a distributable application. It will turn your Java application into a Flatpak package, which can easily be installed and launched by Linux users of any distribution that supports Flatpak.
 
@@ -10,38 +10,29 @@ Generate a Flatpak manifest and other required files from a Maven POM to create 
  * Copies icons, screenshots and thumbnails to package data.
  * Generates launcher script.
  * Detects version and adds Java Flatpak SDK extension.
+ * Runs `flatpak-builder` on generated directory to create and install a Flatpak for testing.
  
 It is *not* a Flatpak Build System, although this may be a first step towards that.
 
+*Note that the name of this Github no longer matches the plugin artifact ID, `flatpak-maven-plugin`.*
+
 ## Maven Goals
 
-A single goal is currently provided. 
+Two goals are currently provided. 
 
  * `generate`. Generates Flatpak Manifest and other data.
+ * `build`. Builds and optionally install the Flatpak for testing.
 
 ## Getting Started.
 
 ### Add Plugin To Your POM
 
-This plugin will be in Maven Central shortly. In the meantime it can be found in OSS Snapshots repository. Add the following to your `<repositories>`.
-
-```xml
-<repository>
-    <id>oss-snapshots</id>
-    <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-    <snapshots />
-    <releases>
-        <enabled>false</enabled>
-    </releases>
-</repository>
-```
-
-And in your `<plugins>` section.
+This plugin is available in Maven Central shortly. 
 
 ```xml
 <plugin>
 	<groupId>uk.co.bithatch</groupId>
-	<artifactId>maven-flatpak-plugin</artifactId>
+	<artifactId>flatpak-maven-plugin</artifactId>
 	<version>0.0.1</version>
 	<configuration>
 		<!-- TODO add configuration -->
@@ -98,9 +89,9 @@ You *probably* want to supply your own `appId` if the automatically derived one 
 
 ```xml
 <configuration>
-	<manifiest>
+	<manifest>
 		<appId>com.acme.Abc</appId>
-	</manifiest>
+	</manifest>
 </configuration>
 ```
 
@@ -169,7 +160,7 @@ You might want to `generate` the Flatpak data as part of the standard Maven `pac
 ```xml
 <executions>
 	<execution>
-		<id>pushsftp-jfx-native-image</id>
+		<id>myapp-flatpak</id>
 		<phase>package</phase>
 		<goals>
 			<goal>generate</goal>
@@ -185,7 +176,6 @@ In which case you can just do `mvn clean package`.
 There is a lot still to do, some highlights include.
 
  * Auto-detect main class.
- * Call `flatpak-builder` to actually build packages for you.
  * Publish to Flathub.
  * Investigate Flatpak build systems.
  * More app types.
