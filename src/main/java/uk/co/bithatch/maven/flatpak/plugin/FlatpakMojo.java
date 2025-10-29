@@ -1,11 +1,9 @@
 package uk.co.bithatch.maven.flatpak.plugin;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -14,28 +12,21 @@ import java.io.Writer;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
-import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
 
-import javax.imageio.ImageIO;
-
 import org.apache.maven.artifact.Artifact;
-import org.apache.maven.execution.MavenSession;
-import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
@@ -53,57 +44,18 @@ import org.eclipse.aether.resolution.ArtifactResult;
 
 import com.fasterxml.jackson.core.exc.StreamWriteException;
 import com.fasterxml.jackson.databind.DatabindException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-
-import edu.emory.mathcs.backport.java.util.Collections;
 
 @Mojo(threadSafe = true, name = "generate", defaultPhase = LifecyclePhase.PACKAGE, requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME, requiresProject = true)
-public class FlatpakMojo extends AbstractMojo {
-
-	private static final String DEFAULT_SDK = "org.freedesktop.Sdk";
-	private static final String DEFAULT_RUNTIME = "24.08";
-	private static final String DEFAULT_CATEGORY = "Utility";
+public class FlatpakMojo extends AbstractCreateMojo {
 
 	@Parameter
 	private List<String> excludeArtifacts;
-
-	@Parameter(defaultValue = "false")
-	private boolean skip;
 
 	@Parameter(required = true, readonly = true, property = "project")
 	private MavenProject project;
 
 	@Parameter()
 	private boolean includeProject = true;
-
-	@Parameter(defaultValue = "${project.build.directory}/app", required = true)
-	private File appDirectory;
-
-	@Parameter(defaultValue = "${project.build.sourceDirectory}/flatpak", required = true)
-	private File flatpakDataDirectory;
-
-	@Parameter
-	private File screenshotsDirectory;
-
-	@Parameter
-	private File thumbnailsDirectory;
-
-	@Parameter(defaultValue = "${project.artifactId}", required = true)
-	private String appModuleName;
-
-	@Parameter(defaultValue = "icon")
-	private String iconName;
-
-	@Parameter(defaultValue = "splash")
-	private String splashName;
-
-	@Parameter
-	private File iconFile;
-
-	@Parameter
-	private File splashFile;
 
 	@Parameter
 	private String[] launcherPreCommands;
@@ -114,20 +66,8 @@ public class FlatpakMojo extends AbstractMojo {
 	@Parameter(required = true)
 	private String mainClass;
 
-	@Parameter
-	private String[] imageTypes = new String[] { "svg", "png", "gif", "jpg", "jpeg" };
-
 	@Parameter(defaultValue = "${maven.compiler.source}")
 	private int javaSdkExtensionVersion;
-
-	@Parameter
-	private Manifest manifest;
-
-	@Parameter
-	private DesktopEntry desktopEntry;
-
-	@Parameter
-	private MetaInfo metaInfo;
 
 	@Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
 	private List<RemoteRepository> repositories;
@@ -159,9 +99,6 @@ public class FlatpakMojo extends AbstractMojo {
 	@Parameter
 	private List<String> vmArgs;
 
-	@Parameter(defaultValue = "${session}", readonly = true, required = true)
-	protected MavenSession session;
-
 	@Component
 	private RepositorySystem repoSystem;
 
@@ -185,169 +122,58 @@ public class FlatpakMojo extends AbstractMojo {
 	private boolean mainArtificateIsModule;
 	
 	@Parameter
-	private String categories;
-	
-	@Parameter
-	private String runtime;
-	
-	@Parameter
-	private String runtimeVersion;
-	
-	@Parameter
 	private String sdk;
 
+	@Parameter
+	private File splashFile;
+
+	@Parameter(defaultValue = "splash")
+	private String splashName;
+
 	@Override
-	public void execute() throws MojoExecutionException {
-		if (skip) {
-			getLog().info("Skipping plugin execution");
-			return;
-		}
-
-		if (manifest == null) {
-			manifest = new Manifest();
-		}
-
-		addManifestDefaults();
+	protected void addManifestDefaults() {
+		super.addManifestDefaults();
 		addSdkExtensionModule();
+	}
 
-		Module appModule = manifest.getModule(appModuleName);
-		if (appModule == null) {
-			appModule = new Module();
-			appModule.setName(appModuleName);
-			manifest.getModules().add(appModule);
-		}
-		if (appModule.getBuildSystem() == null || appModule.getBuildSystem().equals("")) {
-			appModule.setBuildSystem("simple");
-		}
-		if (appModule.getName() == null || appModule.getName().equals("")) {
-			appModule.setName(manifest.getCommand());
-		}
-		if (!"simple".equals(appModule.getBuildSystem())) {
-			throw new UnsupportedOperationException("Build system is not 'simple'.");
-		}
-
+	@Override
+	protected void addInitial() {
 		addExtensions();
-		appDirectory.mkdirs();
+	}
+
+	@Override
+	protected void addOther() throws MojoExecutionException, NoSuchAlgorithmException, IOException, URISyntaxException {
 
 		List<String> classPaths = new ArrayList<>();
 		List<String> modulePaths = new ArrayList<>();
 
-		try {
 
-			addIcon(appModule);
-			addSplash(appModule);
-			addDesktopEntry(appModule);
-			addMetaInfo(appModule);
-			addFlatpakResource(appModule);
-
-			for (Artifact a : project.getArtifacts()) {
-				doArtifact(appModule, a, classPaths, modulePaths);
-			}
-			if (attachedArtifacts) {
-				for (Artifact a : project.getAttachedArtifacts()) {
-					mainArtificateIsModule |= doArtifact(appModule, a, classPaths, modulePaths);
-				}
-			}
-			if (includeProject)
-				mainArtificateIsModule |= doArtifact(appModule, project.getArtifact(), classPaths, modulePaths);
-
-			addLauncher(appModule, classPaths, modulePaths, mainArtificateIsModule);
-
-			try (OutputStream out = new FileOutputStream(new File(appDirectory, manifest.getAppId() + ".yml"))) {
-				writeManifest(manifest, new OutputStreamWriter(out));
-			}
-
-			if (!desktopEntry.isIgnore()) {
-				try (OutputStream out = new FileOutputStream(getDesktopEntryFile())) {
-					writeDesktopEntry(out, desktopEntry);
-				}
-			}
-
-			File metaInfoFile = getMetaInfoFile();
-			try (Writer out = new FileWriter(metaInfoFile)) {
-				writeMetaInfo(metaInfo, out);
-			}
-		} catch (IOException | URISyntaxException | NoSuchAlgorithmException e) {
-			throw new MojoExecutionException("Failed to write manifiest.", e);
+		for (Artifact a : project.getArtifacts()) {
+			doArtifact(appModule, a, classPaths, modulePaths);
 		}
+		if (attachedArtifacts) {
+			for (Artifact a : project.getAttachedArtifacts()) {
+				mainArtificateIsModule |= doArtifact(appModule, a, classPaths, modulePaths);
+			}
+		}
+		if (includeProject)
+			mainArtificateIsModule |= doArtifact(appModule, project.getArtifact(), classPaths, modulePaths);
+
+		addLauncher(appModule, classPaths, modulePaths, mainArtificateIsModule);
+		
+		addSplash(appModule);
+		
+		super.addOther();
 	}
 
 	private void addLauncher(Module appModule, List<String> classPaths, List<String> modulePaths,
 			boolean mainArtificateIsModule)
 			throws StreamWriteException, DatabindException, IOException, FileNotFoundException {
 		appModule.getBuildCommands().add(formatInstall(appModule, manifest.getCommand(), "/app/bin"));
-		appModule.getSources().add(new Source(manifest.getCommand()));
+		appModule.getSources().add(new Source("file", manifest.getCommand()));
 		try (OutputStream out = new FileOutputStream(new File(appDirectory, manifest.getCommand()))) {
 			writeLauncher(manifest, new OutputStreamWriter(out), classPaths, modulePaths, mainArtificateIsModule);
 		}
-	}
-
-	private void addIcon(Module appModule) throws IOException {
-		if (iconFile == null) {
-			List<File> icons = getImageFiles(flatpakDataDirectory);
-			if (icons.size() > 0) {
-				for (File f : icons) {
-					if (f.getName().startsWith(iconName + ".")) {
-						iconFile = f;
-						break;
-					}
-				}
-				if (iconFile == null) {
-					iconFile = icons.get(0);
-				}
-			}
-		}
-		if (iconFile != null) {
-			String ext = getExtension(iconFile);
-			String appIconFile = manifest.getAppId() + "." + ext;
-			copy("Icon file", iconFile, new File(appDirectory, appIconFile), iconFile.lastModified());
-			appModule.getBuildCommands().add(formatInstall(appModule, appIconFile,
-					"/app/share/icons/hicolor/" + getIconDirForTypeAndSize(iconFile) + "/apps"));
-			appModule.getSources().add(new Source(appIconFile));
-		}
-	}
-
-	private void addSplash(Module appModule) throws IOException {
-		if (splashFile == null) {
-			List<File> icons = getImageFiles(flatpakDataDirectory);
-			if (icons.size() > 0) {
-				for (File f : icons) {
-					if (f.getName().startsWith(splashName + ".")) {
-						splashFile = f;
-						break;
-					}
-				}
-				if (splashFile == null) {
-					splashFile = icons.get(0);
-				}
-			}
-		}
-		if (splashFile != null) {
-			String ext = getExtension(iconFile);
-			String splashIconFile = manifest.getAppId() + "." + ext;
-			copy("Splashfile", splashFile, new File(appDirectory, splashIconFile), splashFile.lastModified());
-			appModule.getBuildCommands().add(formatInstall(appModule, splashIconFile,
-					"/app/share/pixmaps/" + manifest.getAppId() + ".splash." + getExtension(splashFile) + "/apps"));
-			appModule.getSources().add(new Source(splashIconFile));
-		}
-	}
-
-	private String getIconDirForTypeAndSize(File iconFile) {
-		String ext = getExtension(iconFile);
-		if (ext.equals("svg")) {
-			return "scalable";
-		}
-		try {
-			BufferedImage bim = ImageIO.read(iconFile);
-			int size = Math.max(bim.getWidth(), bim.getHeight());
-			for (int s : new int[] { 512, 256, 192, 128, 96, 72, 64, 48, 40, 36, 32, 28, 24, 22, 20, 16, 8 }) {
-				if (size >= s) {
-					return s + "x" + s;
-				}
-			}
-		} catch (IOException e) {
-		}
-		return "256x256";
 	}
 
 	private void addExtensions() {
@@ -360,183 +186,13 @@ public class FlatpakMojo extends AbstractMojo {
 		if (!hasJdkExtension) {
 			if (javaSdkExtensionVersion < 12) {
 				manifest.getSdkExtensions().add("org.freedesktop.Sdk.Extension.openjdk11");
-			} else {
+			} else if (javaSdkExtensionVersion < 22) {
 				manifest.getSdkExtensions().add("org.freedesktop.Sdk.Extension.openjdk17");
+			} else if (javaSdkExtensionVersion < 26) {
+				manifest.getSdkExtensions().add("org.freedesktop.Sdk.Extension.openjdk25");
+			} else{
+				manifest.getSdkExtensions().add("org.freedesktop.Sdk.Extension.openjdk21");
 			}
-		}
-	}
-
-	private void addFlatpakResource(Module appModule) throws FileNotFoundException, IOException {
-		for (File f : getImageFiles(appModule, "screenshots", screenshotsDirectory)) {
-			copy("Flatpak workOnFlatpakResources resource", f, new File(appDirectory, f.getName()), f.lastModified());
-		}
-		for (File f : getImageFiles(appModule, "thumbnails", screenshotsDirectory)) {
-			copy("Flatpak workOnFlatpakResources resource", f, new File(appDirectory, f.getName()), f.lastModified());
-		}
-	}
-
-	private List<File> getImageFiles(Module appModule, String type, File root) throws IOException {
-		File dir = resolveFlatpakDataDir(type, root);
-		return getImageFiles(dir);
-	}
-
-	private List<File> getImageFiles(File dir) {
-		if (!dir.exists())
-			return Collections.emptyList();
-		return Arrays.asList(dir.listFiles((d, n) -> {
-			for (String ext : imageTypes) {
-				if (n.toLowerCase().endsWith("." + ext)) {
-					return true;
-				}
-			}
-			return false;
-		}));
-	}
-
-	private void addMetaInfo(Module appModule) throws FileNotFoundException, IOException {
-		if (metaInfo == null) {
-			metaInfo = new MetaInfo();
-		}
-		if (metaInfo.getType() == null || desktopEntry.getType().equals("")) {
-			if (desktopEntry == null || desktopEntry.isIgnore()) {
-				metaInfo.setType("console-application");
-			} else {
-				metaInfo.setType("desktop-application");
-			}
-		}
-		if (metaInfo.getId() == null || metaInfo.getId().equals("")) {
-			metaInfo.setId(manifest.getAppId());
-		}
-		if ((metaInfo.getName() == null || metaInfo.getName().equals("")) && project.getName() != null
-				&& !project.getName().equals("")) {
-			metaInfo.setName(project.getName());
-		}
-		if ((metaInfo.getSummary() == null || metaInfo.getSummary().equals("")) && project.getDescription() != null
-				&& !project.getDescription().equals("")) {
-			metaInfo.setSummary(firstSentence(project.getDescription()));
-		}
-		if ((metaInfo.getDescription() == null || metaInfo.getDescription().equals(""))
-				&& project.getDescription() != null && !project.getDescription().equals("")) {
-			metaInfo.setDescription("<p>" + project.getDescription() + "</p>");
-		}
-		if ((metaInfo.getProjectLicense() == null || metaInfo.getProjectLicense().equals(""))
-				&& !project.getLicenses().isEmpty()) {
-			metaInfo.setProjectLicense(project.getLicenses().get(0).getName());
-		}
-		if ((metaInfo.getMetaDataLicense() == null || metaInfo.getMetaDataLicense().equals(""))
-				&& metaInfo.getProjectLicense() != null && !metaInfo.getProjectLicense().equals("")) {
-			metaInfo.setMetaDataLicense(metaInfo.getProjectLicense());
-		}
-		if (!metaInfo.getUrl().containsKey("homePage") && project.getUrl() != null) {
-			metaInfo.getUrl().put("homepage", project.getUrl());
-		}
-		if (!metaInfo.getUrl().containsKey("vcs-browserPage") && project.getScm() != null
-				&& project.getScm().getUrl() != null && !project.getScm().getUrl().equals("")) {
-			metaInfo.getUrl().put("vcs-browser", project.getScm().getUrl());
-		}
-		if (!metaInfo.getUrl().containsKey("vcs-browserPage") && project.getIssueManagement() != null
-				&& project.getIssueManagement().getUrl() != null && !project.getIssueManagement().getUrl().equals("")) {
-			metaInfo.getUrl().put("bugtracker", project.getIssueManagement().getUrl());
-		}
-		if (!metaInfo.getUrl().containsKey("contact") && !project.getDevelopers().isEmpty()
-				&& project.getDevelopers().get(0).getUrl() != null
-				&& !project.getDevelopers().get(0).getUrl().equals("")) {
-			metaInfo.getUrl().put("contact", project.getDevelopers().get(0).getUrl());
-		}
-		if ((metaInfo.getProjectGroup() == null || metaInfo.getProjectGroup().equals(""))
-				&& project.getOrganization() != null && project.getOrganization().getName() != null
-				&& !project.getOrganization().getName().equals("")) {
-			metaInfo.setProjectGroup(project.getOrganization().getName());
-		}
-
-		if ((metaInfo.getDeveloperName() == null || metaInfo.getDeveloperName().equals(""))
-				&& !project.getDevelopers().isEmpty()) {
-			metaInfo.setDeveloperName(project.getDevelopers().get(0).getName());
-		}
-
-		File metaInfoFile = getMetaInfoFile();
-
-		appModule.getBuildCommands().add(formatInstall(appModule, metaInfoFile.getName(), "/app/share/appdata"));
-		appModule.getSources().add(new Source(metaInfoFile.getName()));
-	}
-
-	private String firstSentence(String description) {
-		int idx = description.indexOf(". ");
-		if (idx == -1) {
-			idx = description.indexOf(".");
-		}
-		if (idx == -1) {
-			return description;
-		}
-		return description.substring(0, idx);
-	}
-
-	private File getMetaInfoFile() {
-		return new File(appDirectory, manifest.getAppId() + ".metainfo.xml");
-	}
-
-	private void addDesktopEntry(Module appModule) throws FileNotFoundException, IOException {
-		if (desktopEntry == null) {
-			desktopEntry = new DesktopEntry();
-		}
-		if (!desktopEntry.isIgnore()) {
-			if (desktopEntry.getType() == null || desktopEntry.getType().equals("")) {
-				desktopEntry.setType("Application");
-			}
-			if (desktopEntry.getName() == null || desktopEntry.getName().equals("")) {
-				desktopEntry.setName(project.getName());
-			}
-			if (desktopEntry.getComment() == null || desktopEntry.getComment().equals("")) {
-				desktopEntry.setComment(project.getDescription());
-			}
-			if (desktopEntry.getExec() == null || desktopEntry.getExec().equals("")) {
-				desktopEntry.setExec(manifest.getCommand());
-			}
-			if ((desktopEntry.getIcon() == null || desktopEntry.getIcon().equals("")) && iconFile != null) {
-				desktopEntry.setIcon(manifest.getAppId());
-			}
-			if (desktopEntry.getCategories() == null || desktopEntry.getCategories().isEmpty()) {
-				if(categories == null || categories.equals("")) {
-					desktopEntry.setCategories(DEFAULT_CATEGORY);
-				}
-				else {
-					desktopEntry.setCategories(categories.trim());
-				}
-			}
-			File desktopFile = getDesktopEntryFile();
-
-			appModule.getBuildCommands()
-					.add(formatInstall(appModule, desktopFile.getName(), "/app/share/applications"));
-			appModule.getSources().add(new Source(desktopFile.getName()));
-		}
-	}
-
-	private File getDesktopEntryFile() {
-		return new File(appDirectory, manifest.getAppId() + ".desktop");
-	}
-
-	private void writeDesktopEntry(OutputStream out, DesktopEntry desktopEntry) {
-		try (PrintWriter writer = new PrintWriter(new OutputStreamWriter(out))) {
-			writer.println("[Desktop Entry]");
-			writer.println(String.format("Type=%s", desktopEntry.getType()));
-			writer.println(String.format("Name=%s", desktopEntry.getName()));
-			for (Map.Entry<String, String> en : desktopEntry.getNames().entrySet()) {
-				writer.println(String.format("Name[%s]=%s", en.getKey(), en.getValue()));
-			}
-			writer.println(String.format("Exec=%s", desktopEntry.getExec()));
-			if (desktopEntry.getIcon() != null) {
-				writer.println(String.format("Icon=%s", desktopEntry.getIcon()));
-			}
-			for (Map.Entry<String, String> en : desktopEntry.getIcons().entrySet()) {
-				writer.println(String.format("Icon[%s]=%s", en.getKey(), en.getValue()));
-			}
-			if (desktopEntry.getComment() != null) {
-				writer.println(String.format("Comment=%s", desktopEntry.getComment()));
-			}
-			for (Map.Entry<String, String> en : desktopEntry.getComments().entrySet()) {
-				writer.println(String.format("Comment[%s]=%s", en.getKey(), en.getValue()));
-			}
-			writer.println(String.format("Categories=%s", desktopEntry.getCategories()));
 		}
 	}
 
@@ -555,41 +211,6 @@ public class FlatpakMojo extends AbstractMojo {
 			sdkExtensionModule.setName("openjdk");
 			sdkExtensionModule.getBuildCommands().add("/usr/lib/sdk/" + jdkName + "/install.sh");
 			manifest.getModules().add(0, sdkExtensionModule);
-		}
-	}
-
-	private void addManifestDefaults() {
-		if (manifest.getAppId() == null || manifest.getAppId().equals("")) {
-			manifest.setAppId(normalisePackage(project.getGroupId()) + "." + normalizeName(project.getArtifactId()));
-		}
-
-		if (manifest.getRuntime() == null || manifest.getRuntime().equals("")) {
-			manifest.setRuntime("org.freedesktop.Platform");
-		}
-
-		if(runtime != null && !runtime.equals("")) {
-			manifest.setRuntime(runtime);
-		}
-		else if (manifest.getRuntimeVersion() == null || manifest.getRuntimeVersion().equals("")) {
-			manifest.setRuntimeVersion(DEFAULT_RUNTIME);
-		}
-
-		if(sdk != null && !sdk.equals("")) {
-			manifest.setRuntime(sdk);
-		}
-		else if (manifest.getSdk() == null || manifest.getSdk().equals("")) {
-			manifest.setSdk(DEFAULT_SDK);
-		}
-
-		if (manifest.getCommand() == null || manifest.getCommand().equals("")) {
-			manifest.setCommand(project.getArtifactId());
-		}
-
-		if (manifest.getFinishArgs().isEmpty()) {
-			manifest.getFinishArgs().add("--socket=x11");
-			manifest.getFinishArgs().add("--share=ipc");
-			manifest.getFinishArgs().add("--share=network");
-			manifest.getFinishArgs().add("--filesystem=home");
 		}
 	}
 
@@ -620,6 +241,31 @@ public class FlatpakMojo extends AbstractMojo {
 		}
 	}
 
+	private void addSplash(Module appModule) throws IOException {
+		if (splashFile == null) {
+			List<File> icons = getImageFiles(flatpakDataDirectory);
+			if (icons.size() > 0) {
+				for (File f : icons) {
+					if (f.getName().startsWith(splashName + ".")) {
+						splashFile = f;
+						break;
+					}
+				}
+				if (splashFile == null) {
+					splashFile = icons.get(0);
+				}
+			}
+		}
+		if (splashFile != null) {
+			String ext = getExtension(iconFile);
+			String splashIconFile = manifest.getAppId() + "." + ext;
+			copy("Splashfile", splashFile, new File(appDirectory, splashIconFile), splashFile.lastModified());
+			appModule.getBuildCommands().add(formatInstall(appModule, splashIconFile,
+					"/app/share/pixmaps/" + manifest.getAppId() + ".splash." + getExtension(splashFile) + "/apps"));
+			appModule.getSources().add(new Source("file", splashIconFile));
+		}
+	}
+
 	private void scriptArgs(List<String> vmopts, List<String> classPaths, List<String> modulePaths) {
 
 		if (splashFile != null) {
@@ -645,42 +291,6 @@ public class FlatpakMojo extends AbstractMojo {
 				vmopts.add(vmArg);
 			}
 		}
-	}
-
-	private void writeManifest(Manifest manifest, Writer writer)
-			throws StreamWriteException, DatabindException, IOException {
-		ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
-		mapper.writeValue(writer, manifest);
-	}
-
-	private void writeMetaInfo(MetaInfo metaInfo, Writer writer)
-			throws StreamWriteException, DatabindException, IOException {
-		XmlMapper mapper = new XmlMapper();
-		new PrintWriter(writer, true).println("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-		mapper.writeValue(writer, metaInfo);
-	}
-
-	static  String normalisePackage(String pkg) {
-		return pkg.replace('-', '_');
-	}
-
-	static String normalizeName(String name) {
-		StringBuilder b = new StringBuilder();
-		char[] ch = name.toCharArray();
-		boolean upperNext = true;
-		for (char c : ch) {
-			if (c == '.' || c == '-' || c == '_') {
-				upperNext = true;
-				continue;
-			}
-			if (upperNext) {
-				b.append(Character.toUpperCase(c));
-				upperNext = false;
-			} else {
-				b.append(c);
-			}
-		}
-		return b.toString();
 	}
 
 	private boolean doArtifact(Module appModule, Artifact a, List<String> classPaths, List<String> modulePaths)
@@ -748,14 +358,6 @@ public class FlatpakMojo extends AbstractMojo {
 			appModule.getBuildCommands().add(formatInstall(appModule, entryPath, "/app/share"));
 		}
 		appModule.getSources().add(entry);
-	}
-
-	private String formatInstall(Module module, String entryPath, String dir) {
-		return formatInstall(module, entryPath, entryPath, dir);
-	}
-
-	private String formatInstall(Module module, String sourcePath, String entryPath, String dir) {
-		return String.format("install -D %s %s/%s", sourcePath, dir, entryPath);
 	}
 
 	private String getFileName(Artifact a) {
@@ -956,15 +558,6 @@ public class FlatpakMojo extends AbstractMojo {
 		return path != null && (path.startsWith("http:") || path.startsWith("https:"));
 	}
 
-	private void copy(String reason, File p1, File p2, long mod) throws IOException {
-		getLog().debug(String.format("Copy %s - %s to %s", reason, p1.getAbsolutePath(), p2.getAbsolutePath()));
-		p2.getParentFile().mkdirs();
-		try (OutputStream out = new FileOutputStream(p2)) {
-			Files.copy(p1.toPath(), out);
-		}
-		p2.setLastModified(mod);
-	}
-
 	private static String getFileChecksum(MessageDigest digest, File file) throws IOException {
 		try (FileInputStream fis = new FileInputStream(file)) {
 			byte[] byteArray = new byte[1024];
@@ -980,13 +573,6 @@ public class FlatpakMojo extends AbstractMojo {
 			sb.append(Integer.toString((bytes[i] & 0xff) + 0x100, 16).substring(1));
 		}
 		return sb.toString();
-	}
-
-	private File resolveFlatpakDataDir(String type, File specific) {
-		if (specific == null) {
-			return new File(flatpakDataDirectory, type);
-		} else
-			return specific;
 	}
 
 	private String getExtension(File file) {

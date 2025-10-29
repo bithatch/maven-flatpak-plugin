@@ -20,7 +20,8 @@ It is *not* a Flatpak Build System, although this may be a first step towards th
 
 Two goals are currently provided. 
 
- * `generate`. Generates Flatpak Manifest and other data.
+ * `generate`. Generates Flatpak Manifest and other data for your Maven Java application.
+ * `create`. Generates a generic Flatpak Manifest and other data.
  * `build`. Builds and optionally install the Flatpak for testing.
 
 ## Getting Started.
@@ -33,7 +34,7 @@ This plugin is available in Maven Central shortly.
 <plugin>
 	<groupId>uk.co.bithatch</groupId>
 	<artifactId>flatpak-maven-plugin</artifactId>
-	<version>0.0.1</version>
+	<version>0.0.3</version>
 	<configuration>
 		<!-- TODO add configuration -->
 	</configuration>
@@ -48,7 +49,7 @@ The plugin takes as much information as it can from *other* standard POM element
  * `<name/>`.  Required, used for application meta-data and desktop entry.
  * `<description/>`.  Required, used for application meta-data and desktop entry.
  * `<url/>`. Required. Used for application meta-data.
- * `<licenses/>`. Required. Used for application meta-data.
+ * `<licenses/>`. Required. Used for application meta-data. The `<name>` must be a valid [SPDX License Identifier](https://spdx.org/licenses/).
  * `<scm/>`. Optional. Used for application meta-data.
  * `<issueManagement/>`. Optional. Used for application meta-data.
  * `<developers/>`. Optional. Used for application meta-data.
@@ -171,6 +172,13 @@ You might want to `generate` the Flatpak data as part of the standard Maven `pac
 
 In which case you can just do `mvn clean package`. 
 
+## Changes
+
+### 0.0.3
+
+ * Support the complete manifest  in `<manifest>`. 
+ * Allow creation of generic flatpaks (i.e. without a Java application). I am using this to build a Flatpak for an Eclipse based product using Tycho. This already deals with dependencies and products an executable bundle for the current platform.
+
 ## TODO
 
 There is a lot still to do, some highlights include.
@@ -180,5 +188,4 @@ There is a lot still to do, some highlights include.
  * Investigate Flatpak build systems.
  * More app types.
  
-
 

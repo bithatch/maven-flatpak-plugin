@@ -28,11 +28,17 @@ public class BuildMojo extends AbstractMojo {
 	@Parameter(defaultValue = "${project.build.directory}/app", required = true)
 	private File appDir;
 
+	@Parameter(defaultValue = "${project.build.directory}/flatpak-repo", required = true)
+	private File repo;
+
 	@Parameter
 	private File manifestFile;
 
 	@Parameter(defaultValue = "${project.build.directory}/flatpak-build", required = true)
 	private File buildDirectory;
+
+	@Parameter(defaultValue = "${project.build.directory}/flatpak-builder", required = true)
+	private File stateDirectory;
 
 	@Parameter(defaultValue = "${session}", readonly = true, required = true)
 	private MavenSession session;
@@ -76,10 +82,12 @@ public class BuildMojo extends AbstractMojo {
 		if(!deps.equals(""))
 			args.add("--install-deps-from=" + deps);
 
-		args.add("--repo=repo");
+		args.add("--repo=" + repo.getAbsolutePath());
 		
 		if(install)
 			args.add("--install");
+		
+		args.add("--state-dir=" + stateDirectory);
 		
 		args.add(buildDirectory.getAbsolutePath());
 		
@@ -92,6 +100,7 @@ public class BuildMojo extends AbstractMojo {
 
 		ProcessBuilder pb = new ProcessBuilder(args);
 		pb.redirectErrorStream(true);
+		pb.directory(project.getBasedir());
 		try {
 			Process process = pb.start();
 			BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
