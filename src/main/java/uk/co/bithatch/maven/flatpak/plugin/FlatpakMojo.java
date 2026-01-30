@@ -51,9 +51,6 @@ public class FlatpakMojo extends AbstractCreateMojo {
 	@Parameter
 	private List<String> excludeArtifacts;
 
-	@Parameter(required = true, readonly = true, property = "project")
-	private MavenProject project;
-
 	@Parameter()
 	private boolean includeProject = true;
 

@@ -50,7 +50,7 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 	private boolean skip;
 
 	@Parameter(required = true, readonly = true, property = "project")
-	private MavenProject project;
+	protected MavenProject project;
 
 	@Parameter(defaultValue = "${project.build.sourceDirectory}/flatpak", required = true)
 	protected File flatpakDataDirectory;
@@ -86,12 +86,15 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 	private String categories;
 
 	@Parameter
+	@Deprecated
 	private String runtime;
 
 	@Parameter
+	@Deprecated
 	private String runtimeVersion;
 
 	@Parameter
+	@Deprecated
 	private String sdk;
 
 	protected Module appModule;

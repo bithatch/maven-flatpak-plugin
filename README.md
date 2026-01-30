@@ -174,6 +174,10 @@ In which case you can just do `mvn clean package`.
 
 ## Changes
 
+### 0.0.4
+
+ * Fix [NPE](https://github.com/bithatch/maven-flatpak-plugin/issues/2).
+
 ### 0.0.3
 
  * Support the complete manifest  in `<manifest>`. 
