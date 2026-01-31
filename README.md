@@ -4,7 +4,7 @@ Generate a Flatpak manifest and other required files from a Maven POM to create 
 
  * Generates a directory of files from which `flatpak-builder` can be run to build a package.
  * Either copies dependencies, or links to their original locations on Maven Central (in which case the package build downloads them). This makes for a small packages.
- * Generates the Flatpak manfiest using a the simple build system.
+ * Generates the Flatpak manfiest using the simple build system.
  * Generates AppStream metadata from POM metadata and plugin configuration.
  * Generates Desktop Entry from POM metadata and plugin configuration.
  * Copies icons, screenshots and thumbnails to package data.
@@ -18,7 +18,7 @@ It is *not* a Flatpak Build System, although this may be a first step towards th
 
 ## Maven Goals
 
-Two goals are currently provided. 
+Three goals are currently provided. 
 
  * `generate`. Generates Flatpak Manifest and other data for your Maven Java application.
  * `create`. Generates a generic Flatpak Manifest and other data.
@@ -34,7 +34,7 @@ This plugin is available in Maven Central shortly.
 <plugin>
 	<groupId>uk.co.bithatch</groupId>
 	<artifactId>flatpak-maven-plugin</artifactId>
-	<version>0.0.3</version>
+	<version>0.0.4</version>
 	<configuration>
 		<!-- TODO add configuration -->
 	</configuration>
