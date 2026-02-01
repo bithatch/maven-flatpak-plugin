@@ -37,7 +37,7 @@ import edu.emory.mathcs.backport.java.util.Collections;
 public abstract class AbstractCreateMojo extends AbstractMojo {
 
 	protected static final String DEFAULT_SDK = "org.freedesktop.Sdk";
-	protected static final String DEFAULT_RUNTIME = "24.08";
+	protected static final String DEFAULT_RUNTIME = "25.08";
 	protected static final String DEFAULT_CATEGORY = "Utility";
 
 	@Parameter
@@ -52,7 +52,7 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 	@Parameter(required = true, readonly = true, property = "project")
 	protected MavenProject project;
 
-	@Parameter(defaultValue = "${project.build.sourceDirectory}/flatpak", required = true)
+	@Parameter(defaultValue = "${basedir}/src/flatpak", required = true)
 	protected File flatpakDataDirectory;
 
 	@Parameter
@@ -214,7 +214,7 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 	}
 
 	@SuppressWarnings("unchecked")
-	protected List<File> getImageFiles(File dir) {
+	private List<File> getImageFiles(File dir) {
 		if (!dir.exists())
 			return Collections.emptyList();
 		return Arrays.asList(dir.listFiles((d, n) -> {
@@ -227,9 +227,13 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 		}));
 	}
 
+	protected List<File> getImageFiles(Module appModule, String type, File root) throws IOException {
+		return getImageFiles(resolveFlatpakDataDir(type, root));
+	}
+
 	private void addIcon(Module appModule) throws IOException {
 		if (iconFile == null) {
-			List<File> icons = getImageFiles(flatpakDataDirectory);
+			List<File> icons = getImageFiles(appModule, "icons", null);
 			if (icons.size() > 0) {
 				for (File f : icons) {
 					if (f.getName().startsWith(iconName + ".")) {
@@ -240,6 +244,10 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 				if (iconFile == null) {
 					iconFile = icons.get(0);
 				}
+				getLog().info("Discovered icon " + iconFile);
+			}
+			else {
+				getLog().warn("No icon specified, and none found in " + flatpakDataDirectory + " (of types " + String.join(", ", imageTypes) + ")");
 			}
 		}
 		if (iconFile != null) {
@@ -274,14 +282,9 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 		for (File f : getImageFiles(appModule, "screenshots", screenshotsDirectory)) {
 			copy("Flatpak resource", f, new File(appDirectory, f.getName()), f.lastModified());
 		}
-		for (File f : getImageFiles(appModule, "thumbnails", screenshotsDirectory)) {
+		for (File f : getImageFiles(appModule, "thumbnails", thumbnailsDirectory)) {
 			copy("Flatpak resource", f, new File(appDirectory, f.getName()), f.lastModified());
 		}
-	}
-
-	private List<File> getImageFiles(Module appModule, String type, File root) throws IOException {
-		File dir = resolveFlatpakDataDir(type, root);
-		return getImageFiles(dir);
 	}
 
 	private void addMetaInfo(Module appModule) throws FileNotFoundException, IOException {
@@ -302,13 +305,16 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 				&& !project.getName().equals("")) {
 			metaInfo.setName(project.getName());
 		}
-		if ((metaInfo.getSummary() == null || metaInfo.getSummary().equals("")) && project.getDescription() != null
-				&& !project.getDescription().equals("")) {
-			metaInfo.setSummary(firstSentence(project.getDescription()));
+		String desc = project.getDescription();
+		if ((metaInfo.getSummary() == null || metaInfo.getSummary().equals(""))) {
+			if(desc != null && !desc.equals(""))
+				metaInfo.setSummary(firstSentence(desc));
+			else
+				throw new IllegalArgumentException("A summary is required for metainfo. You should add a standard <description> tag to your POM, or a <summary> tag to the <metainfo> tag of the plugin configuration.");
 		}
 		if ((metaInfo.getDescription() == null || metaInfo.getDescription().equals(""))
-				&& project.getDescription() != null && !project.getDescription().equals("")) {
-			metaInfo.setDescription("<p>" + project.getDescription() + "</p>");
+				&& desc != null && !desc.equals("")) {
+			metaInfo.setDescription("<p>" + desc + "</p>");
 		}
 		if ((metaInfo.getProjectLicense() == null || metaInfo.getProjectLicense().equals(""))
 				&& !project.getLicenses().isEmpty()) {
@@ -443,7 +449,7 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 		if (runtime != null && !runtime.equals("")) {
 			manifest.setRuntime(runtime);
 		} else if (manifest.getRuntimeVersion() == null || manifest.getRuntimeVersion().equals("")) {
-			manifest.setRuntimeVersion(DEFAULT_RUNTIME);
+			manifest.setRuntimeVersion(calcRuntime());
 		}
 
 		if (sdk != null && !sdk.equals("")) {
@@ -469,6 +475,10 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 			manifest.getFinishArgs().add("--share=network");
 			manifest.getFinishArgs().add("--filesystem=home");
 		}
+	}
+
+	protected String calcRuntime() {
+		return DEFAULT_RUNTIME;
 	}
 
 	private void writeManifest(Manifest manifest, Writer writer)

@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -60,7 +61,7 @@ public class FlatpakMojo extends AbstractCreateMojo {
 	@Parameter
 	private String[] launcherPostCommands;
 
-	@Parameter(required = true)
+	@Parameter
 	private String mainClass;
 
 	@Parameter(defaultValue = "${maven.compiler.source}")
@@ -140,7 +141,14 @@ public class FlatpakMojo extends AbstractCreateMojo {
 
 	@Override
 	protected void addOther() throws MojoExecutionException, NoSuchAlgorithmException, IOException, URISyntaxException {
-
+		if (mainClass == null || mainClass.isEmpty()) {
+	        mainClass = detectMainClass();
+	        
+	        /* TODO for now, just turn off modules when we detect the class */
+	        modules = false;
+	        getLog().warn("Using automatic main clas detection, turning off module path. To avoid this, specify a <mainClass> with the module name, e.g. com.your.module/" + mainClass);
+	    }
+		
 		List<String> classPaths = new ArrayList<>();
 		List<String> modulePaths = new ArrayList<>();
 
@@ -174,33 +182,45 @@ public class FlatpakMojo extends AbstractCreateMojo {
 	}
 
 	private void addExtensions() {
+		if (!hasJdkExtension()) {
+			addDefaultSdkExtensions(getDefaultSdkExtensions());
+		}
+	}
+
+	private void addDefaultSdkExtensions(List<String> sdks) {
+		if (javaSdkExtensionVersion < 12) {
+			sdks.add("org.freedesktop.Sdk.Extension.openjdk11");
+		} else if (javaSdkExtensionVersion < 22) {
+			sdks.add("org.freedesktop.Sdk.Extension.openjdk17");
+		} else if (javaSdkExtensionVersion < 26) {
+			sdks.add("org.freedesktop.Sdk.Extension.openjdk25");
+		} else{
+			sdks.add("org.freedesktop.Sdk.Extension.openjdk21");
+		}
+	}
+
+	private boolean hasJdkExtension() {
 		boolean hasJdkExtension = false;
-		for (String sdkExtension : manifest.getSdkExtensions()) {
+		for (String sdkExtension : getDefaultSdkExtensions()) {
 			if (sdkExtension.contains("openjdk")) {
 				hasJdkExtension = true;
 			}
 		}
-		if (!hasJdkExtension) {
-			if (javaSdkExtensionVersion < 12) {
-				manifest.getSdkExtensions().add("org.freedesktop.Sdk.Extension.openjdk11");
-			} else if (javaSdkExtensionVersion < 22) {
-				manifest.getSdkExtensions().add("org.freedesktop.Sdk.Extension.openjdk17");
-			} else if (javaSdkExtensionVersion < 26) {
-				manifest.getSdkExtensions().add("org.freedesktop.Sdk.Extension.openjdk25");
-			} else{
-				manifest.getSdkExtensions().add("org.freedesktop.Sdk.Extension.openjdk21");
-			}
-		}
+		return hasJdkExtension;
 	}
 
 	private void addSdkExtensionModule() {
 		Module sdkExtensionModule = manifest.getModule("openjdk");
 		if (sdkExtensionModule == null) {
 			String jdkName = "openjdk";
-			for (String ext : manifest.getSdkExtensions()) {
+			
+			getLog().info("Looking for OpenJDK");
+			
+			for (String ext : getDefaultSdkExtensions()) {
+				getLog().info("   -- " + ext);
+				
 				if (ext.contains("openjdk")) {
-					int idx = ext.lastIndexOf('.');
-					jdkName = idx == -1 ? ext : ext.substring(idx + 1);
+					jdkName = ext.substring(ext.lastIndexOf("openjdk"));
 				}
 			}
 			sdkExtensionModule = new Module();
@@ -209,6 +229,14 @@ public class FlatpakMojo extends AbstractCreateMojo {
 			sdkExtensionModule.getBuildCommands().add("/usr/lib/sdk/" + jdkName + "/install.sh");
 			manifest.getModules().add(0, sdkExtensionModule);
 		}
+	}
+
+	private List<String> getDefaultSdkExtensions() {
+		List<String> l = new ArrayList<>();
+		addDefaultSdkExtensions(l);
+		return Stream.concat(l.stream(), manifest.getSdkExtensions().stream()).
+				distinct().
+				collect(Collectors.toList());
 	}
 
 	private void writeLauncher(Manifest manifest, Writer writer, List<String> classPaths, List<String> modulePaths,
@@ -240,7 +268,7 @@ public class FlatpakMojo extends AbstractCreateMojo {
 
 	private void addSplash(Module appModule) throws IOException {
 		if (splashFile == null) {
-			List<File> icons = getImageFiles(flatpakDataDirectory);
+			List<File> icons = getImageFiles(appModule, "splash", null);
 			if (icons.size() > 0) {
 				for (File f : icons) {
 					if (f.getName().startsWith(splashName + ".")) {
@@ -581,5 +609,84 @@ public class FlatpakMojo extends AbstractCreateMojo {
 	private String getBasePath(String path) {
 		int idx = path.lastIndexOf('/');
 		return idx == -1 ? path : path.substring(idx + 1);
+	}
+	
+	private String detectMainClass() throws MojoExecutionException {
+	    File outputDirectory = new File(project.getBuild().getOutputDirectory());
+	    if (!outputDirectory.exists()) {
+	        return null;
+	    }
+
+	    List<String> mainClasses = new ArrayList<>();
+	    scanForMain(outputDirectory, "", mainClasses);
+
+	    if (mainClasses.isEmpty()) {
+	        throw new MojoExecutionException("No main class found in project. Please configure 'mainClass' manually.");
+	    }
+
+	    if (mainClasses.size() > 1) {
+	        throw new MojoExecutionException("Multiple main classes found: " + String.join(", ", mainClasses) + 
+	            ". Please specify the 'mainClass' in your pom.xml configuration.");
+	    }
+
+	    getLog().info("Automatically detected main class: " + mainClasses.get(0));
+	    return mainClasses.get(0);
+	}
+
+	private void scanForMain(File file, String packageName, List<String> mainClasses) {
+	    if (file.isDirectory()) {
+	        File[] children = file.listFiles();
+	        if (children == null) return;
+
+	        for (File child : children) {
+	            // 1. Skip module-info immediately to avoid ACC_MODULE errors
+	            if (child.getName().equals("module-info.class")) {
+	                continue;
+	            }
+
+	            if (child.isDirectory()) {
+	                // 2. Ignore META-INF directory to avoid scanning versioned module-infos
+	                if (child.getName().equals("META-INF") && packageName.isEmpty()) {
+	                    continue;
+	                }
+	                
+	                String nextPackage = packageName.isEmpty() ? "" : packageName + ".";
+	                scanForMain(child, nextPackage + child.getName(), mainClasses);
+	            } else if (child.getName().endsWith(".class")) {
+	                String className = packageName.isEmpty() ? 
+	                    child.getName().replace(".class", "") : 
+	                    packageName + "." + child.getName().replace(".class", "");
+	                
+	                if (hasMainMethod(className)) {
+	                    mainClasses.add(className);
+	                }
+	            }
+	        }
+	    }
+	}
+
+	private boolean hasMainMethod(String className) {
+	    try {
+	        List<String> runtimeClasspathElements = project.getRuntimeClasspathElements();
+	        URL[] urls = runtimeClasspathElements.stream()
+	            .map(s -> { try { return new File(s).toURI().toURL(); } catch (Exception e) { return null; } })
+	            .toArray(URL[]::new);
+	        
+	        try (java.net.URLClassLoader loader = new java.net.URLClassLoader(urls, Thread.currentThread().getContextClassLoader())) {
+	            Class<?> clazz = loader.loadClass(className);
+	            // Search for: public static void main(String[] args)
+	            clazz.getMethod("main", String[].class);
+	            return true;
+	        }
+	    } catch (NoSuchMethodException e) {
+	        return false;
+	    } catch (ClassNotFoundException | LinkageError e) {
+	        // Log at debug level so it doesn't clutter output, but explains why a class was skipped
+	        getLog().debug("Skipping class " + className + " due to loading error: " + e.getMessage());
+	        return false;
+	    } catch (Exception e) {
+	        getLog().debug("Could not check class " + className + " for main method", e);
+	        return false;
+	    }
 	}
 }

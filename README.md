@@ -8,7 +8,7 @@ Generate a Flatpak manifest and other required files from a Maven POM to create 
  * Generates AppStream metadata from POM metadata and plugin configuration.
  * Generates Desktop Entry from POM metadata and plugin configuration.
  * Copies icons, screenshots and thumbnails to package data.
- * Generates launcher script.
+ * Detects your `main` and generates launcher script.
  * Detects version and adds Java Flatpak SDK extension.
  * Runs `flatpak-builder` on generated directory to create and install a Flatpak for testing.
  
@@ -34,7 +34,7 @@ This plugin is available in Maven Central shortly.
 <plugin>
 	<groupId>uk.co.bithatch</groupId>
 	<artifactId>flatpak-maven-plugin</artifactId>
-	<version>0.0.4</version>
+	<version>0.0.5</version>
 	<configuration>
 		<!-- TODO add configuration -->
 	</configuration>
@@ -64,7 +64,15 @@ The plugin expects resources to exist in a standard location (the locations of w
  
 ### Configure The Plugin
 
-For anything else that cannot be determined in any other way, you must provide plugin configuration. The bare minimum for this is the `<mainClass/>`.
+For anything else that cannot be determined in any other way, you must provide plugin configuration. 
+
+```xml
+<configuration>
+	<!-- your config -->
+</configuration>
+```
+
+The plugin will try to detect the Java class has your `main` method in it, but if there is more than class, or cannot be discovered for any other reason, you should add the `<mainClass/>` element to configuration.
 
 ```xml
 <configuration>
@@ -174,6 +182,11 @@ In which case you can just do `mvn clean package`.
 
 ## Changes
 
+### 0.0.5
+
+ * Automatically detect `main` class. Note, this initial implementation of main detection will turn off the module path in the launcher, all dependencies will be added to CLASSPATH.
+ * Incorrect directory being searched by default for icons, screenshots etc.
+
 ### 0.0.4
 
  * Fix [NPE](https://github.com/bithatch/maven-flatpak-plugin/issues/2).
@@ -187,7 +200,6 @@ In which case you can just do `mvn clean package`.
 
 There is a lot still to do, some highlights include.
 
- * Auto-detect main class.
  * Publish to Flathub.
  * Investigate Flatpak build systems.
  * More app types.
