@@ -26,6 +26,8 @@ Three goals are currently provided.
 
 ## Getting Started.
 
+*You can find a complete example application [here](https://github.com/bithatch/flatpak-maven-example)*
+
 ### Add Plugin To Your POM
 
 This plugin is available in Maven Central shortly. 
