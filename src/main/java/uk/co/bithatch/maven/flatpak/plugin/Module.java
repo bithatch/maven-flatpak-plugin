@@ -15,7 +15,7 @@ public class Module {
 	private String name;
 	private String buildSystem;
 	private List<String> buildCommands = new ArrayList<>();
-	private List<Source> sources = new ArrayList<>();
+	private List<Object> sources = new ArrayList<>();
 	private BuildOptions buildOptions;
 	private List<String> secretEnv = new ArrayList<>();
 	private List<String> configOpts = new ArrayList<>();
@@ -77,7 +77,7 @@ public class Module {
 	}
 
 	@JsonProperty(value = "sources", index = 3)
-	public final List<Source> getSources() {
+	public final List<Object> getSources() {
 		return sources;
 	}
 

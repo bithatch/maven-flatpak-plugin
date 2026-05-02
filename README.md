@@ -184,6 +184,16 @@ In which case you can just do `mvn clean package`.
 
 ## Changes
 
+### 0.0.6
+
+ * New goal `sources` if you just want to manage sources (i.e. dependencies). You can usee
+   the `generate` goal once for the initial setup, then customise and just have the plugin
+   maintain dependencies.
+ * `remotesFromOriginalSource` now defaults to `false`, i.e. jars are downloaded and 
+  included as a source as opposed to http URLs to the Maven repository.
+ * Split and remove `build` mojo in favour of `installer`, `run` and `export` goals.
+ * Changed default location of `<repo>` to be dependent on the goal above. For `installer` and `run` it is now `$HOME/.m2/flatpak-repo`. For `export` it is `target/flatpak-repo`. 
+
 ### 0.0.5
 
  * Automatically detect `main` class. Note, this initial implementation of main detection will turn off the module path in the launcher, all dependencies will be added to CLASSPATH.

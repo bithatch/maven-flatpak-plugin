@@ -8,28 +8,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.maven.execution.MavenSession;
-import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
-import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.plugins.annotations.ResolutionScope;
-import org.apache.maven.project.MavenProject;
 
-@Mojo(threadSafe = true, name = "build", defaultPhase = LifecyclePhase.PACKAGE, requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME, requiresProject = true)
-public class BuildMojo extends AbstractMojo {
-
-	@Parameter(defaultValue = "false")
-	private boolean skip;
-
-	@Parameter(required = true, readonly = true, property = "project")
-	private MavenProject project;
+public abstract class BuildMojo extends AbstractFlatpakMojo {
 
 	@Parameter(defaultValue = "${project.build.directory}/app", required = true)
 	private File appDir;
-
-	@Parameter(defaultValue = "${project.build.directory}/flatpak-repo", required = true)
-	private File repo;
 
 	@Parameter
 	private File manifestFile;
@@ -49,15 +34,14 @@ public class BuildMojo extends AbstractMojo {
 	@Parameter(defaultValue = "true")
 	private boolean forceClean;
 
-	@Parameter(defaultValue = "false")
-	private boolean install;
-
 	@Parameter(defaultValue = "flathub", required = true)
 	private String deps;
 
 	@Parameter(defaultValue = "", property = "flatpak.appId")
 	private String appId;
 
+	@Parameter
+	private File repo;
 
 	@Override
 	public void execute() throws MojoExecutionException {
@@ -77,17 +61,23 @@ public class BuildMojo extends AbstractMojo {
 		if(forceClean)
 			args.add("--force-clean");
 		
-		args.add("--user");
-		
 		if(!deps.equals(""))
 			args.add("--install-deps-from=" + deps);
 
-		args.add("--repo=" + repo.getAbsolutePath());
-		
-		if(install)
-			args.add("--install");
-		
-		args.add("--state-dir=" + stateDirectory);
+		if(repo == null) {
+			args.add("--repo=" + getDefaultRepo().getAbsolutePath());
+		}
+		else {
+			args.add("--repo=" + repo.getAbsolutePath());
+		}
+
+		if(stateDirectory == null ) {
+			args.add("--state-dir=" + System.getProperty("user.home") + File.separator + ".cache" + File.separator + "flatpak-builder-state");
+		}
+		else {
+			args.add("--state-dir=" + stateDirectory);
+		}
+		buildArgs(args);
 		
 		args.add(buildDirectory.getAbsolutePath());
 		
@@ -117,8 +107,26 @@ public class BuildMojo extends AbstractMojo {
 		catch(IOException ioe) {
 			throw new MojoExecutionException("Failed to run Flatpak Builder command.", ioe);
 		}
-
 	}
 
+	protected abstract File getDefaultRepo();
+
+	protected abstract void buildArgs(List<String> args); 
+
+	@Override
+	protected boolean isIgnoreSnapshotRemotes() {
+		throw new IllegalStateException();
+	}
+
+
+	@Override
+	protected boolean isIncludeVersion() {
+		throw new IllegalStateException();
+	}
+
+	@Override
+	protected File getSourcesFile() {
+		throw new IllegalStateException();
+	}
 
 }

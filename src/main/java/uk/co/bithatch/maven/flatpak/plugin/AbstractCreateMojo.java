@@ -20,11 +20,8 @@ import java.util.Map;
 
 import javax.imageio.ImageIO;
 
-import org.apache.maven.execution.MavenSession;
-import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.project.MavenProject;
 
 import com.fasterxml.jackson.core.exc.StreamWriteException;
 import com.fasterxml.jackson.databind.DatabindException;
@@ -34,7 +31,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 import edu.emory.mathcs.backport.java.util.Collections;
 
-public abstract class AbstractCreateMojo extends AbstractMojo {
+public abstract class AbstractCreateMojo extends AbstractFlatpakMojo {
 
 	protected static final String DEFAULT_SDK = "org.freedesktop.Sdk";
 	protected static final String DEFAULT_RUNTIME = "25.08";
@@ -45,12 +42,6 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 
 	@Parameter(defaultValue = "${project.build.directory}/app", required = true)
 	protected File appDirectory;
-
-	@Parameter(defaultValue = "false")
-	private boolean skip;
-
-	@Parameter(required = true, readonly = true, property = "project")
-	protected MavenProject project;
 
 	@Parameter(defaultValue = "${basedir}/src/flatpak", required = true)
 	protected File flatpakDataDirectory;
@@ -78,9 +69,6 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 
 	@Parameter
 	private MetaInfo metaInfo;
-
-	@Parameter(defaultValue = "${session}", readonly = true, required = true)
-	protected MavenSession session;
 
 	@Parameter
 	private String categories;
@@ -517,37 +505,11 @@ public abstract class AbstractCreateMojo extends AbstractMojo {
 		return b.toString();
 	}
 
-	protected final String formatInstall(Module module, String entryPath, String dir) {
-		return formatInstall(module, entryPath, entryPath, dir);
-	}
-
-	protected final String formatInstall(Module module, String sourcePath, String entryPath, String dir) {
-		return String.format("install -D %s %s/%s", sourcePath, dir, entryPath);
-	}
-
-	protected void copy(String reason, File p1, File p2, long mod) throws IOException {
-		getLog().debug(String.format("Copy %s - %s to %s", reason, p1.getAbsolutePath(), p2.getAbsolutePath()));
-		File pp2 = p2.getParentFile();
-		if (!pp2.exists() && !p2.getParentFile().mkdirs()) {
-			throw new IOException("Could not create target directory " + pp2);
-		}
-		try (OutputStream out = new FileOutputStream(p2)) {
-			Files.copy(p1.toPath(), out);
-		}
-		p2.setLastModified(mod);
-	}
-
 	private File resolveFlatpakDataDir(String type, File specific) {
 		if (specific == null) {
 			return new File(flatpakDataDirectory, type);
 		} else
 			return specific;
-	}
-
-	private String getExtension(File file) {
-		String n = file.getName().toLowerCase();
-		int idx = n.lastIndexOf('.');
-		return idx == -1 ? n : n.substring(idx + 1);
 	}
 
 }
