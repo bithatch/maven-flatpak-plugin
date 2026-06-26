@@ -143,7 +143,7 @@ Any element in either the `<manifest/>`, `<desktopEntry/>` or `<metaInfo/>` can 
 ## Usage
 
 ```
-mvn clean package uk.co.bithatch:maven-flatpak-plugin:generate
+mvn clean package uk.co.bithatch:flatpak-maven-plugin:generate
 ```
 
 This will by default generate the Flatpak manifest and others in `target/app`. So from here you can build the package.
